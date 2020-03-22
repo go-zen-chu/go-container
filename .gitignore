@@ -1,6 +1,6 @@
 main
-putold
-alpine.tar
+newroot/*
+!newroot/.gitkeep
 
 # Binaries for programs and plugins
 *.exe

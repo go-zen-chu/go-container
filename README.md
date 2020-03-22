@@ -2,11 +2,34 @@
 
 Build your own container with golang.
 
+## Feature
+
+- container with new PID, UTS, NAMESPACE
+- cgroups
+- pivot_root jail
+
+## Run
+
+```bash
+git clone git@github.com:go-zen-chu/go-container.git && cd go-container
+make download-alpine
+GOARCH=amd64 GOOS=linux go build ./main.go
+
+# this binary only supports running on linux
+docker run -it --privileged --rm -v $PWD:/go-container -w /go-container alpine:latest /bin/sh
+
+/go-container # ./main run /bin/sh
+...
+2020/03/22 06:32:08 running given command on container: [/bin/sh]
+/ # ls
+bin     home    mnt     putold  sbin    tmp                      
+dev     lib     opt     root    srv     usr                      
+etc     media   proc    run     sys     var
+```
+
 ## Description
 
 Please refer to my blog post -> (Japanese)
-
-## Run
 
 ## FAQ
 

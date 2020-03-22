@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -21,7 +20,7 @@ func main() {
 		panic("only linux is supported")
 	}
 	if len(os.Args) == 1 {
-		panic("usage: ./go-container run /bin/sh")
+		panic("usage: ./go-container run <command for running container>")
 	}
 	switch os.Args[1] {
 	case "run":
@@ -39,13 +38,12 @@ func main() {
 
 func profile() error {
 	log.Println("[PROFILE] current process status:")
-	fmt.Printf("pid: %d, parent pid: %d, euid: %d, uid: %d, egid: %d, gid: %d\n",
-		os.Getpid(), os.Getppid(), os.Geteuid(), os.Getuid(), os.Getegid(), os.Getgid())
+	fmt.Printf("pid: %d, parent pid: %d, uid: %d, gid: %d\n", os.Getpid(), os.Getppid(), os.Getuid(), os.Getgid())
 	if dir, err := os.Getwd(); err != nil {
 		return err
 	} else {
 		fmt.Printf("current dir: %s\n", dir)
-		if files, err := ioutil.ReadDir("."); err != nil {
+		if files, err := ioutil.ReadDir(dir); err != nil {
 			return err
 		} else {
 			for _, file := range files {
@@ -65,27 +63,7 @@ func profile() error {
 			fmt.Printf("cgroups:\n%s\n", content)
 		}
 	} else {
-		fmt.Println("/proc/self not exists")
-	}
-	return nil
-}
-
-func copyFile(src, dst string) error {
-	s, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	d, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	if _, err = io.Copy(d, s); err != nil {
-		return err
-	}
-	if err := d.Chmod(0777); err != nil {
-		return err
+		fmt.Println("cannot find /proc/self from current path")
 	}
 	return nil
 }
@@ -96,13 +74,12 @@ func parent() error {
 	if err := profile(); err != nil {
 		return err
 	}
-
-	// /proc/self/exe is a special file containing an in-memory image of the current executable in Linux
+	// TIPS: /proc/self/exe is a special file containing an in-memory image of the current executable in Linux
 	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
 	// parameters for making child process
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:   syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
-		Unshareflags: syscall.CLONE_NEWNS,
+		// create process with new UTS, new PID (=1), new NAMESPACE
+		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -118,6 +95,7 @@ func child() error {
 	if err := profile(); err != nil {
 		return err
 	}
+
 	// create cgroup to restrict resource usage of container
 	shares := uint64(50)
 	control, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/go-container"), &specs.LinuxResources{
@@ -137,74 +115,45 @@ func child() error {
 	if err := profile(); err != nil {
 		return err
 	}
-	log.Println("mount newroot")
-	if err := os.MkdirAll("/newroot", 0755); err != nil {
-		return fmt.Errorf("creating folder: %s", err)
+
+	// setup for pivot root
+	log.Println("mkdir newroot/putold")
+	if err := os.MkdirAll("newroot/putold", 0755); err != nil {
+		return fmt.Errorf("creating directory: %s", err)
 	}
-	if err := syscall.Mount("newroot", "/newroot", "", syscall.MS_BIND, ""); err != nil {
-		return fmt.Errorf("bind mounting /newroot: %s", err)
-	}
-	if err := profile(); err != nil {
-		return err
-	}
-	// log.Println("create putold")
-	// if err := os.MkdirAll("newroot/putold", 0700); err != nil {
-	// 	return fmt.Errorf("creating folder: %s", err)
-	// }
-	log.Println("chdir /newroot/putold")
-	if err := os.Chdir("/newroot/putold"); err != nil {
-		return fmt.Errorf("change dir to /newroot/putold: %s", err)
+	log.Println("bind mount to ./newroot")
+	if err := syscall.Mount("newroot", "newroot", "", syscall.MS_BIND, ""); err != nil {
+		return fmt.Errorf("bind mounting newroot: %s", err)
 	}
 	if err := profile(); err != nil {
 		return err
 	}
+
 	log.Println("run pivot_root")
-	if err := syscall.PivotRoot("/newroot", "/newroot/putold"); err != nil {
+	if err := syscall.PivotRoot("./newroot", "./newroot/putold"); err != nil {
 		return fmt.Errorf("pivot root: %s", err)
 	}
 	if err := profile(); err != nil {
 		return err
 	}
-	log.Println("chroot /putold")
-	if err := syscall.Chroot("/putold"); err != nil {
-		return fmt.Errorf("chroot: %s", err)
+	// go inside pivot root jail
+	log.Println("chdir /")
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("change dir to /: %s", err)
+	}
+	if err := profile(); err != nil {
+		return err
+	}
+	// TIPS: by unmounting, parent resource will be hidden from child process
+	if err := syscall.Unmount("/putold", syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("unmount pivot_root dir %v", err)
 	}
 	if err := profile(); err != nil {
 		return err
 	}
 
-	// This chdir go back to original / (not /newroot/putold)
-	// log.Println("chdir /")
-	// if err := os.Chdir("/"); err != nil {
-	// 	return fmt.Errorf("change dir to /: %s", err)
-	// }
-	// if err := profile(); err != nil {
-	// 	return err
-	// }
-
-	//log.Println("chdir /putold")
-	// if err := syscall.Chroot("/putold"); err != nil {
-	// 	return fmt.Errorf("chroot: %s", err)
-	// }
-	// log.Println("after chroot")
-	// if err := profile(); err != nil {
-	// 	return err
-	// }
-	// if err := os.Chdir("/putold"); err != nil {
-	// 	return fmt.Errorf("change dir to /: %s", err)
-	// }
-	// if err := syscall.Unmount("/", 0); err != nil {
-	// 	return fmt.Errorf("unmount %s", err)
-	// }
-	// log.Println("after umount")
-	// if err := profile(); err != nil {
-	// 	return err
-	// }
-	// if err := syscall.Mount("/", "/", "", syscall.MS_BIND, ""); err != nil {
-	// 	return fmt.Errorf("mounting new root in container: %s", err)
-	// }
+	// mouting /proc inside container
 	log.Println("mount /proc")
-	// mount to /putold/proc
 	if err := syscall.Mount("proc", "proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mounting new /proc in container: %s", err)
 	}
@@ -216,7 +165,8 @@ func child() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	log.Println("running given command on container")
+	// this is the start of container process
+	log.Printf("running given command on container: %v", os.Args[2:])
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("while running cmd: %s", err)
 	}
