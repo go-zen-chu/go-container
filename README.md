@@ -1,13 +1,13 @@
 # go-container
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_shield)
 
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_shield)
 
 Build your own container with golang.
 
 ## Feature
 
 - container with new PID, UTS, NAMESPACE
-- cgroups
+- cgroups v2
 - pivot_root jail
 
 ## Run
@@ -31,7 +31,7 @@ etc     media   proc    run     sys     var
 
 ## Description
 
-Please refer to my blog post -> (Japanese)
+Please refer to my blog post -> (Japanese)[Go言語で自分好みのコンテナを作成する - Think Abstract](https://amasuda.xyz/post/2020-03-07-create-container-with-golang/)
 
 ## FAQ
 
@@ -49,6 +49,6 @@ When you `go run main.go` on MacOS, you'll get error as below.
 
 This is because cgroups uses Linux kernel function. Build with `GOARCH=amd64 GOOS=linux go build`
 
-
 ## License
+
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_large)

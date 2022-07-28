@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,14 +11,12 @@ import (
 	"syscall"
 
 	"github.com/containerd/cgroups"
-	"github.com/opencontainers/runtime-spec/specs-go"
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 )
 
 func main() {
-	if runtime.GOOS == "linux" {
-		log.Println("recognizing as linux")
-	} else {
-		panic("only linux is supported")
+	if err := checkEnv(); err != nil {
+		panic(err)
 	}
 	if len(os.Args) == 1 {
 		panic("usage: ./go-container run <command for running container>")
@@ -34,6 +33,21 @@ func main() {
 	default:
 		panic(fmt.Sprintf("not supported command: %s", os.Args[1]))
 	}
+	log.Println("finishing container...")
+}
+
+func checkEnv() error {
+	if runtime.GOOS == "linux" {
+		log.Println("recognizing as linux")
+	} else {
+		return errors.New("only linux is supported")
+	}
+	if cgroups.Mode() == cgroups.Unified {
+		log.Println("running linux with cgroups v2")
+	} else {
+		return errors.New("cgroups v1 is not supported")
+	}
+	return nil
 }
 
 func profile() error {
@@ -97,25 +111,27 @@ func child() error {
 	}
 
 	// create cgroup to restrict resource usage of container
-	shares := uint64(50)
-	control, err := cgroups.New(cgroups.V1, cgroups.StaticPath("/go-container"), &specs.LinuxResources{
-		CPU: &specs.LinuxCPU{
-			Shares: &shares,
+	minMem := int64(1024)         // 1K
+	maxMem := int64(100*1024 ^ 2) //100M
+	res := cgroupsv2.Resources{
+		Memory: &cgroupsv2.Memory{
+			// values are in bytes: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#memory-interface-files
+			Min: &minMem,
+			Max: &maxMem,
 		},
-	})
+	}
+	mgr, err := cgroupsv2.NewSystemd("/", "go-container.slice", -1, &res)
 	if err != nil {
-		return fmt.Errorf("creating cgroups: %s", err)
+		return fmt.Errorf("creating systemd cgroups v2: %w", err)
 	}
-	defer control.Delete()
-	// restrict self
-	if err := control.Add(cgroups.Process{Pid: os.Getpid()}); err != nil {
-		return fmt.Errorf("adding cgroups: %s", err)
+
+	if err = mgr.DeleteSystemd(); err != nil {
+		return fmt.Errorf("failed to delete systemd cgroup v2: %w", err)
 	}
-	log.Println("cgroups go-container has set")
+	log.Println("cgroups v2 go-container.slice has been set!")
 	if err := profile(); err != nil {
 		return err
 	}
-
 	// setup for pivot root
 	log.Println("mkdir newroot/putold")
 	if err := os.MkdirAll("newroot/putold", 0755); err != nil {
