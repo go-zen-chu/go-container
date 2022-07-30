@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/cgroups"
@@ -52,11 +53,11 @@ func checkEnv() error {
 
 func profile() error {
 	log.Println("[PROFILE] current process status:")
-	fmt.Printf("pid: %d, parent pid: %d, uid: %d, gid: %d\n", os.Getpid(), os.Getppid(), os.Getuid(), os.Getgid())
+	fmt.Printf("[PROFILE PIDs] pid: %d, parent pid: %d, uid: %d, gid: %d\n", os.Getpid(), os.Getppid(), os.Getuid(), os.Getgid())
 	if dir, err := os.Getwd(); err != nil {
 		return err
 	} else {
-		fmt.Printf("current dir: %s\n", dir)
+		fmt.Printf("[PROFILE DIRS] current dir and files: %s\n", dir)
 		if files, err := ioutil.ReadDir(dir); err != nil {
 			return err
 		} else {
@@ -66,15 +67,23 @@ func profile() error {
 		}
 	}
 	if _, err := os.Stat("/proc/self"); err == nil {
-		if content, err := ioutil.ReadFile("/proc/self/mounts"); err != nil {
-			return err
+		if mounts, err := ioutil.ReadFile("/proc/self/mounts"); err != nil {
+			return fmt.Errorf("read mounts: %w", err)
 		} else {
-			fmt.Printf("mount info:\n%s\n", content)
+			mlines := strings.Split(string(mounts), "\n")
+			fmt.Println("[PROFILE MOUNTS] mount info:")
+			for _, m := range mlines {
+				fmt.Printf(" |- %s\n", m)
+			}
 		}
-		if content, err := ioutil.ReadFile("/proc/self/cgroup"); err != nil {
+		if cgroups, err := ioutil.ReadFile("/proc/self/cgroup"); err != nil {
 			return err
 		} else {
-			fmt.Printf("cgroups:\n%s\n", content)
+			cglines := strings.Split(string(cgroups), "\n")
+			fmt.Println("[PROFILE CGROUPS] cgroups:")
+			for _, cg := range cglines {
+				fmt.Printf(" |- %s\n", cg)
+			}
 		}
 	} else {
 		fmt.Println("cannot find /proc/self from current path")
@@ -84,7 +93,9 @@ func profile() error {
 
 // parent function update current process as container
 func parent() error {
-	log.Println("parent: original process")
+	log.Println("===========================================")
+	log.Println("starting parent process")
+	log.Println("===========================================")
 	if err := profile(); err != nil {
 		return err
 	}
@@ -153,8 +164,8 @@ func child() error {
 	if err := profile(); err != nil {
 		return err
 	}
-	// go inside pivot root jail
-	log.Println("chdir /")
+
+	log.Println("chdir / and go inside pivot root jail")
 	if err := os.Chdir("/"); err != nil {
 		return fmt.Errorf("change dir to /: %w", err)
 	}

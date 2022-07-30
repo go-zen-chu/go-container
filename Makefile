@@ -13,3 +13,7 @@ download-alpine-docker:
 	docker rm alpine-tmp
 	tar -xvf alpine.tar -C newroot/
 	rm alpine.tar
+
+.PHONY: run-go-container
+run-go-container:
+	docker run -it --privileged --rm -v ${PWD}:/go-container -w /go-container alpine:latest -- /bin/sh

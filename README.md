@@ -3,6 +3,7 @@
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_shield)
 
 Build your own container with golang.
+This container requires docker with cgroup v2.
 
 ## Feature
 
@@ -48,6 +49,11 @@ When you `go run main.go` on MacOS, you'll get error as below.
 ```
 
 This is because cgroups uses Linux kernel function. Build with `GOARCH=amd64 GOOS=linux go build`
+
+### operation not permitted
+
+When you run container in lima & contianerd, you may get error above when mounting /proc.
+I'm keep investigating but yet catches a cause. Please use docker.
 
 ## License
 
