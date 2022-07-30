@@ -98,8 +98,11 @@ func parent() error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	log.Println("===========================================")
+	log.Println("starting child process")
+	log.Println("===========================================")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("while running cmd: %s", err)
+		return fmt.Errorf("while running cmd: %w", err)
 	}
 	return nil
 }
@@ -120,26 +123,24 @@ func child() error {
 			Max: &maxMem,
 		},
 	}
-	mgr, err := cgroupsv2.NewSystemd("/", "go-container.slice", -1, &res)
+	mgr, err := cgroupsv2.NewManager("/", "/go-container-cgroup", &res)
 	if err != nil {
-		return fmt.Errorf("creating systemd cgroups v2: %w", err)
+		return fmt.Errorf("creating cgroups v2: %w", err)
 	}
+	defer mgr.Delete()
 
-	if err = mgr.DeleteSystemd(); err != nil {
-		return fmt.Errorf("failed to delete systemd cgroup v2: %w", err)
-	}
-	log.Println("cgroups v2 go-container.slice has been set!")
+	log.Println("cgroups v2 /go-container-cgroup created successfully!")
 	if err := profile(); err != nil {
 		return err
 	}
 	// setup for pivot root
 	log.Println("mkdir newroot/putold")
 	if err := os.MkdirAll("newroot/putold", 0755); err != nil {
-		return fmt.Errorf("creating directory: %s", err)
+		return fmt.Errorf("creating directory: %w", err)
 	}
 	log.Println("bind mount to ./newroot")
 	if err := syscall.Mount("newroot", "newroot", "", syscall.MS_BIND, ""); err != nil {
-		return fmt.Errorf("bind mounting newroot: %s", err)
+		return fmt.Errorf("bind mounting newroot: %w", err)
 	}
 	if err := profile(); err != nil {
 		return err
@@ -147,7 +148,7 @@ func child() error {
 
 	log.Println("run pivot_root")
 	if err := syscall.PivotRoot("./newroot", "./newroot/putold"); err != nil {
-		return fmt.Errorf("pivot root: %s", err)
+		return fmt.Errorf("pivot root: %w", err)
 	}
 	if err := profile(); err != nil {
 		return err
@@ -155,14 +156,14 @@ func child() error {
 	// go inside pivot root jail
 	log.Println("chdir /")
 	if err := os.Chdir("/"); err != nil {
-		return fmt.Errorf("change dir to /: %s", err)
+		return fmt.Errorf("change dir to /: %w", err)
 	}
 	if err := profile(); err != nil {
 		return err
 	}
 	// TIPS: by unmounting, parent resource will be hidden from child process
 	if err := syscall.Unmount("/putold", syscall.MNT_DETACH); err != nil {
-		return fmt.Errorf("unmount pivot_root dir %v", err)
+		return fmt.Errorf("unmount pivot_root dir %w", err)
 	}
 	if err := profile(); err != nil {
 		return err
@@ -171,7 +172,7 @@ func child() error {
 	// mouting /proc inside container
 	log.Println("mount /proc")
 	if err := syscall.Mount("proc", "proc", "proc", 0, ""); err != nil {
-		return fmt.Errorf("mounting new /proc in container: %s", err)
+		return fmt.Errorf("mounting new /proc in container: %w", err)
 	}
 	if err := profile(); err != nil {
 		return err
@@ -182,9 +183,11 @@ func child() error {
 	cmd.Stderr = os.Stderr
 
 	// this is the start of container process
+	log.Println("===========================================")
 	log.Printf("running given command on container: %v", os.Args[2:])
+	log.Println("===========================================")
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("while running cmd: %s", err)
+		return fmt.Errorf("while running cmd: %w", err)
 	}
 	return nil
 }
