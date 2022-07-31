@@ -1,13 +1,14 @@
 # go-container
+
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_shield)
 
-
 Build your own container with golang.
+This container requires docker with cgroup v2.
 
 ## Feature
 
 - container with new PID, UTS, NAMESPACE
-- cgroups
+- cgroups v2
 - pivot_root jail
 
 ## Run
@@ -31,11 +32,11 @@ etc     media   proc    run     sys     var
 
 ## Description
 
-Please refer to my blog post -> (Japanese)
+Please refer to my blog post -> (Japanese)[Go言語で自分好みのコンテナを作成する - Think Abstract](https://amasuda.xyz/post/2020-03-07-create-container-with-golang/)
 
 ## FAQ
 
-### cannot build on my Mac
+### cannot build go binary on my Mac
 
 When you `go run main.go` on MacOS, you'll get error as below.
 
@@ -49,6 +50,16 @@ When you `go run main.go` on MacOS, you'll get error as below.
 
 This is because cgroups uses Linux kernel function. Build with `GOARCH=amd64 GOOS=linux go build`
 
+### cgroup v2 memory limit is not working
+
+This is known issue and I'm investigating it.
+May be running go-container in docker or containerd container is not suitable for testing cgroup v2 limits because they don't run systemd (cgroup v2 works well with systemd).
+
+### I'm getting `operation not permitted` when running in lima
+
+When you run container in lima & contianerd, you may get error above when mounting /proc.
+I'm keep investigating but yet catches a cause. Please use docker.
 
 ## License
+
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_large)
