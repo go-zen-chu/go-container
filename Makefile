@@ -16,4 +16,5 @@ download-alpine-docker:
 
 .PHONY: run-go-container
 run-go-container:
-	docker run -it --privileged --rm -v ${PWD}:/go-container -w /go-container alpine:latest -- /bin/sh
+	GOARCH=amd64 GOOS=linux go build main.go
+	docker run -it --privileged --rm -v ${PWD}:/go-container -w /go-container alpine:latest /bin/sh -c "./main run /bin/sh"

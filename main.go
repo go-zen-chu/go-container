@@ -147,9 +147,9 @@ func child() error {
 	}
 
 	// create cgroup to restrict resource usage of container
-	minMem := int64(1024) // 1K
+	minMem := int64(1) // 1K
 	//maxMem := int64(100*1024 ^ 2) //100M
-	maxMem := int64(1024) //1K
+	maxMem := int64(1) //1K
 	res := cgroupsv2.Resources{
 		Memory: &cgroupsv2.Memory{
 			// values are in bytes: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#memory-interface-files
@@ -163,7 +163,7 @@ func child() error {
 	}
 	defer mgr.Delete()
 
-	log.Println("cgroups v2 /go-container-cgroup created successfully!")
+	log.Println("cgroups v2 /go-container-cgroupv2 created successfully!")
 	if err := profile(); err != nil {
 		return err
 	}
@@ -207,6 +207,7 @@ func child() error {
 
 	// mouting /proc inside container
 	log.Println("mount /proc")
+	// NOTE: somehow mount /proc fails in lima & nerdctl with EPERM
 	if err := syscall.Mount("proc", "proc", "proc", 0, ""); err != nil {
 		return fmt.Errorf("mounting new /proc in container: %w", err)
 	}
