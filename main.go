@@ -72,21 +72,43 @@ func profile() error {
 		} else {
 			mlines := strings.Split(string(mounts), "\n")
 			fmt.Println("[PROFILE MOUNTS] mount info:")
+			// you may find line below for backward compatibility for cgroup v1 (cgroupfs)
+			// cgroup /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
 			for _, m := range mlines {
-				fmt.Printf(" |- %s\n", m)
+				if !strings.HasPrefix(m, "udev") {
+					fmt.Printf(" |- %s\n", m)
+				}
 			}
 		}
 		if cgroups, err := ioutil.ReadFile("/proc/self/cgroup"); err != nil {
 			return err
 		} else {
 			cglines := strings.Split(string(cgroups), "\n")
-			fmt.Println("[PROFILE CGROUPS] cgroups:")
+			fmt.Println("[PROFILE CGROUPS (/proc/self/cgroup)] cgroups:")
+			// The entry for cgroup v2 is always in the format “0::$PATH”:
+			// https://docs.kernel.org/admin-guide/cgroup-v2.html
 			for _, cg := range cglines {
 				fmt.Printf(" |- %s\n", cg)
 			}
 		}
 	} else {
 		fmt.Println("cannot find /proc/self from current path")
+	}
+	if _, err := os.Stat("/go-container-cgroupv2"); err == nil {
+		fmt.Println("[PROFILE CGROUPS v2] found generated cgroupv2")
+		if files, err := ioutil.ReadDir("/go-container-cgroupv2"); err != nil {
+			return err
+		} else {
+			for _, file := range files {
+				filepath := fmt.Sprintf("/go-container-cgroupv2/%s", file.Name())
+				fmt.Printf(" |- %s\n", filepath)
+				content, err := ioutil.ReadFile(filepath)
+				if err != nil {
+					return fmt.Errorf("reading %s got %w", filepath, err)
+				}
+				fmt.Println(string(content))
+			}
+		}
 	}
 	return nil
 }
@@ -125,8 +147,9 @@ func child() error {
 	}
 
 	// create cgroup to restrict resource usage of container
-	minMem := int64(1024)         // 1K
-	maxMem := int64(100*1024 ^ 2) //100M
+	minMem := int64(1024) // 1K
+	//maxMem := int64(100*1024 ^ 2) //100M
+	maxMem := int64(1024) //1K
 	res := cgroupsv2.Resources{
 		Memory: &cgroupsv2.Memory{
 			// values are in bytes: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#memory-interface-files
@@ -134,7 +157,7 @@ func child() error {
 			Max: &maxMem,
 		},
 	}
-	mgr, err := cgroupsv2.NewManager("/", "/go-container-cgroup", &res)
+	mgr, err := cgroupsv2.NewManager("/", "/go-container-cgroupv2", &res)
 	if err != nil {
 		return fmt.Errorf("creating cgroups v2: %w", err)
 	}
@@ -165,7 +188,9 @@ func child() error {
 		return err
 	}
 
-	log.Println("chdir / and go inside pivot root jail")
+	log.Println("===========================================")
+	log.Println("chdir / and go inside pivot root jail. Now we are in created container!")
+	log.Println("===========================================")
 	if err := os.Chdir("/"); err != nil {
 		return fmt.Errorf("change dir to /: %w", err)
 	}
