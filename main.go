@@ -147,9 +147,8 @@ func child() error {
 	}
 
 	// create cgroup to restrict resource usage of container
-	minMem := int64(1) // 1K
-	//maxMem := int64(100*1024 ^ 2) //100M
-	maxMem := int64(1) //1K
+	minMem := int64(1)            // 1K
+	maxMem := int64(100*1024 ^ 2) //100M
 	res := cgroupsv2.Resources{
 		Memory: &cgroupsv2.Memory{
 			// values are in bytes: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#memory-interface-files
