@@ -18,3 +18,23 @@ download-alpine-docker:
 run-go-container:
 	GOARCH=amd64 GOOS=linux go build main.go
 	docker run -it --privileged --rm -v ${PWD}:/go-container -w /go-container alpine:latest /bin/sh -c "./main run /bin/sh"
+
+.PHONY: build
+## build the gct CLI binary
+build:
+	go build -o gct ./cmd/gct
+
+.PHONY: build-linux
+## build the gct CLI binary for Linux (amd64)
+build-linux:
+	GOARCH=amd64 GOOS=linux go build -o gct ./cmd/gct
+
+.PHONY: test
+## run unit tests
+test:
+	go test ./internal/...
+
+.PHONY: install
+## install gct into GOPATH/bin
+install:
+	go install ./cmd/gct
