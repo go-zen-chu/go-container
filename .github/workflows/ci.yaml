@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build-and-test:
+    name: Build & Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build gct
+        run: go build -o gct ./cmd/gct
+
+      - name: Run unit tests
+        run: go test ./internal/...
+
+      - name: Verify gct help
+        run: ./gct --help
+
+  command-usecase:
+    name: Command Use Cases (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    needs: build-and-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build gct
+        run: go build -o gct ./cmd/gct
+
+      - name: gct pull alpine:latest
+        run: ./gct pull alpine:latest
+
+      - name: gct image list
+        run: ./gct image list
+
+      - name: gct container list (empty)
+        run: ./gct container list
+
+      - name: gct exec alpine:latest /bin/echo
+        if: runner.os == 'Linux'
+        run: sudo ./gct exec alpine:latest /bin/echo "hello from container"
+
+      - name: gct container list (after exec)
+        if: runner.os == 'Linux'
+        run: ./gct container list
+
+      - name: gct image rm alpine:latest
+        run: ./gct image rm alpine:latest
+
+      - name: gct image list (after rm)
+        run: ./gct image list
