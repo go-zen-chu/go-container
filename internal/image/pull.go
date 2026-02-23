@@ -175,14 +175,26 @@ func extractTar(r io.Reader, destDir string) error {
 			}
 			f.Close()
 		case tar.TypeSymlink:
+			// Validate symlink target to prevent path traversal
+			linkname := hdr.Linkname
+			if filepath.IsAbs(linkname) {
+				log.Printf("Warning: skipping symlink %s -> %s: absolute symlink targets are not allowed", target, linkname)
+				continue
+			}
+			// Resolve the symlink target as if it were followed from the directory containing the symlink
+			resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(target), linkname))
+			if !strings.HasPrefix(resolvedTarget, destDir+string(os.PathSeparator)) && resolvedTarget != destDir {
+				log.Printf("Warning: skipping symlink %s -> %s: resolved target outside destDir", target, linkname)
+				continue
+			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("creating parent dir for symlink %s: %w", target, err)
 			}
 			// Remove existing file before creating symlink
 			os.Remove(target)
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
+			if err := os.Symlink(linkname, target); err != nil {
 				// Non-fatal: symlinks may fail in some cases
-				log.Printf("Warning: creating symlink %s -> %s: %v", target, hdr.Linkname, err)
+				log.Printf("Warning: creating symlink %s -> %s: %v", target, linkname, err)
 			}
 		case tar.TypeLink:
 			linkTarget := filepath.Join(destDir, filepath.Clean(hdr.Linkname))
