@@ -69,11 +69,11 @@ func storeDir() string {
 
 // containerStateDir returns the container state directory.
 func containerStateDir() string {
-	home, err := os.UserHomeDir()
+	dir, err := container.DefaultStateDir()
 	if err != nil {
-		log.Fatalf("getting home directory: %v", err)
+		log.Fatalf("getting container state directory: %v", err)
 	}
-	return home + "/.gct/containers"
+	return dir
 }
 
 // -----------------------------------------------------------------------
