@@ -85,6 +85,12 @@ func RunChild(containerID, rootfsDir string, command []string) error {
 	} else {
 		defer mgr.Delete()
 		log.Printf("cgroups v2 %s created successfully", cgroupName)
+		pid := os.Getpid()
+		if err := mgr.AddProc(uint64(pid)); err != nil {
+			log.Printf("Warning: adding current process (pid %d) to cgroup %s: %v (continuing without memory limits)", pid, cgroupName, err)
+		} else {
+			log.Printf("added current process (pid %d) to cgroup %s", pid, cgroupName)
+		}
 	}
 
 	// Set up pivot_root
