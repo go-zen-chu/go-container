@@ -126,12 +126,16 @@ func extractTar(r io.Reader, destDir string) error {
 
 		// Clean the path to prevent path traversal
 		cleanName := filepath.Clean(hdr.Name)
-		if strings.HasPrefix(cleanName, "..") {
+
+		// Build the target path and ensure it stays within destDir
+		target := filepath.Join(destDir, cleanName)
+		cleanTarget := filepath.Clean(target)
+		destPath := filepath.Clean(destDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(cleanTarget, destPath) {
+			// Skip entries that would escape the destination directory
 			continue
 		}
-
-		target := filepath.Join(destDir, cleanName)
-
+		target = cleanTarget
 		// Handle whiteout files (layer deletions)
 		base := filepath.Base(cleanName)
 		dir := filepath.Dir(cleanName)
