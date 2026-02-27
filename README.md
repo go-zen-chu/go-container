@@ -2,63 +2,106 @@
 
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fgo-zen-chu%2Fgo-container?ref=badge_shield)
 
-Build your own container with golang.
-This container requires docker with cgroup v2.
+`gct` is a lightweight OCI container management CLI for Linux and macOS, written in Go.
+It runs containers without requiring a VM or any virtualization layer.
 
-## Feature
+## Features
 
-- container with new PID, UTS, NAMESPACE
-- cgroups v2
-- pivot_root jail
+- Pull and push OCI images from/to any OCI-compatible registry (Docker Hub, GHCR, ECR, etc.)
+- Run containers from OCI images
+- List locally stored images and containers
+- **Linux**: Full isolation using kernel namespaces (UTS, PID, mount), cgroups v2, and `pivot_root`
+- **macOS**: Filesystem isolation via `chroot` (no VM required; kernel namespaces not available on macOS)
 
-## Run
+## Build
 
 ```bash
-git clone git@github.com:go-zen-chu/go-container.git && cd go-container
-make download-alpine
-GOARCH=amd64 GOOS=linux go build ./main.go
+# Build for the current platform
+make build            # outputs ./gct
 
-# this binary only supports running on linux
-docker run -it --privileged --rm -v $PWD:/go-container -w /go-container alpine:latest /bin/sh
+# Build for Linux (cross-compile from macOS)
+make build-linux      # outputs ./gct (linux/amd64)
 
-/go-container # ./main run /bin/sh
-...
-2020/03/22 06:32:08 running given command on container: [/bin/sh]
-/ # ls
-bin     home    mnt     putold  sbin    tmp                      
-dev     lib     opt     root    srv     usr                      
-etc     media   proc    run     sys     var
+# Install into GOPATH/bin
+make install
 ```
 
-## Description
+## Usage
 
-Please refer to my blog post -> (Japanese)[Go言語で自分好みのコンテナを作成する - Think Abstract](https://amasuda.xyz/post/2020-03-07-create-container-with-golang/)
+```bash
+# Pull an OCI image from a registry
+gct pull alpine:latest
+gct pull ubuntu:22.04
+
+# Push a locally stored image to a registry
+gct push myregistry.io/myimage:v1.0
+
+# Run a command interactively inside a container
+gct exec -it alpine:latest /bin/sh
+gct exec -it ubuntu:22.04 /bin/bash
+
+# Run a one-off command
+gct exec alpine:latest /bin/echo hello
+
+# List locally stored images
+gct image list
+
+# Remove a locally stored image
+gct image rm alpine:latest
+
+# List all containers (running and stopped)
+gct container list
+
+# Remove a container state record
+gct container rm <container-id>
+```
+
+## How it works
+
+### Linux
+
+On Linux, `gct exec` re-invokes itself inside new Linux namespaces
+(`CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS`) using `/proc/self/exe`.
+Inside the new namespaces it:
+1. Creates a cgroups v2 hierarchy to limit memory usage.
+2. Bind-mounts the image rootfs and calls `pivot_root` to jail the filesystem.
+3. Mounts a fresh `/proc` inside the container.
+4. `execve`s the requested command.
+
+### macOS
+
+On macOS, Linux kernel namespaces are not available. `gct exec` uses the system
+`chroot` command to provide filesystem isolation. Running as root is required for
+`chroot` on macOS.
+
+## Local image storage
+
+Images are stored in `~/.gct/images/<name>_<tag>/`:
+
+```
+~/.gct/
+  images/
+    alpine_latest/
+      meta.json      # image metadata (name, tag, digest, size, created_at)
+      rootfs/        # extracted image filesystem
+  containers/
+    <container-id>.json   # container state (id, image, status, pid, ...)
+```
 
 ## FAQ
 
-### cannot build go binary on my Mac
+### Building for Linux on macOS
 
-When you `go run main.go` on MacOS, you'll get error as below.
+The cgroups library requires Linux headers. Cross-compile with:
 
 ```bash
-# github.com/containerd/cgroups
-../../go/pkg/mod/github.com/containerd/cgroups@v0.0.0-20200226104544-44306b6a1d46/memory.go:211:33: undefined: unix.SYS_EVENTFD2
-../../go/pkg/mod/github.com/containerd/cgroups@v0.0.0-20200226104544-44306b6a1d46/memory.go:211:55: undefined: unix.EFD_CLOEXEC
-../../go/pkg/mod/github.com/containerd/cgroups@v0.0.0-20200226104544-44306b6a1d46/utils.go:67:8: undefined: unix.CGROUP2_SUPER_MAGIC
-../../go/pkg/mod/github.com/containerd/cgroups@v0.0.0-20200226104544-44306b6a1d46/utils.go:74:18: undefined: unix.CGROUP2_SUPER_MAGIC
+GOARCH=amd64 GOOS=linux go build -o gct ./cmd/gct
 ```
 
-This is because cgroups uses Linux kernel function. Build with `GOARCH=amd64 GOOS=linux go build`
+### `operation not permitted` when running `gct exec`
 
-### cgroup v2 memory limit is not working
-
-This is known issue and I'm investigating it.
-May be running go-container in docker or containerd container is not suitable for testing cgroup v2 limits because they don't run systemd (cgroup v2 works well with systemd).
-
-### I'm getting `operation not permitted` when running in lima
-
-When you run container in lima & contianerd, you may get error above when mounting /proc.
-I'm keep investigating but yet catches a cause. Please use docker.
+Container isolation (namespaces, `pivot_root`, cgroups) requires root privileges.
+Run with `sudo` or as root.
 
 ## License
 
