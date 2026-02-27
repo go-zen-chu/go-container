@@ -175,17 +175,19 @@ func extractTar(r io.Reader, destDir string) error {
 			}
 			f.Close()
 		case tar.TypeSymlink:
-			// Validate symlink target to prevent path traversal
+			// Absolute symlink targets (e.g. "/bin/busybox") are valid in container
+			// images and will resolve correctly inside the container after chroot /
+			// pivot_root. We create them as-is. Only relative symlinks that resolve
+			// outside destDir are rejected to prevent host path traversal.
 			linkname := hdr.Linkname
-			if filepath.IsAbs(linkname) {
-				log.Printf("Warning: skipping symlink %s -> %s: absolute symlink targets are not allowed", target, linkname)
-				continue
-			}
-			// Resolve the symlink target as if it were followed from the directory containing the symlink
-			resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(target), linkname))
-			if !strings.HasPrefix(resolvedTarget, destDir+string(os.PathSeparator)) && resolvedTarget != destDir {
-				log.Printf("Warning: skipping symlink %s -> %s: resolved target outside destDir", target, linkname)
-				continue
+			if !filepath.IsAbs(linkname) {
+				// Resolve the relative symlink from the directory that holds it
+				// and verify the resolved path stays within destDir.
+				resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(target), linkname))
+				if !strings.HasPrefix(resolvedTarget, destDir+string(os.PathSeparator)) && resolvedTarget != destDir {
+					log.Printf("Warning: skipping symlink %s -> %s: resolved target outside destDir", target, linkname)
+					continue
+				}
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("creating parent dir for symlink %s: %w", target, err)

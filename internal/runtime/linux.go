@@ -93,6 +93,13 @@ func RunChild(containerID, rootfsDir string, command []string) error {
 		}
 	}
 
+	// Make all existing mounts private in this namespace so that pivot_root
+	// works even when the parent namespace uses shared mounts (e.g. GitHub
+	// Actions runners, systemd hosts).
+	if err := syscall.Mount("", "/", "", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("making mounts private: %w", err)
+	}
+
 	// Set up pivot_root
 	putold := rootfsDir + "/putold"
 	if err := os.MkdirAll(putold, 0755); err != nil {
